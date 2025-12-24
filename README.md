@@ -20,3 +20,6 @@ In distributed enterprise systems, clock drift leads to data corruption and auth
    ```bash
    git clone [https://github.com/yourusername/chronospulse-ntp-optimizer.git](https://github.com/subhanigori/chronospulse-ntp-optimizer.git)
    cd chronospulse-ntp-optimizer
+
+
+<img width="902" height="636" alt="image" src="https://github.com/user-attachments/assets/022c88dd-c5f7-4ae0-b8e6-0645345570a0" />
