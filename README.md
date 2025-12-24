@@ -1,6 +1,16 @@
-# ChronosPulse NTP Optimizer v1.3.0
+# ChronosPulse NTP Optimizer v1.3.4
 
 **Architect:** [subhanigori@gmail.com](mailto:subhanigori@gmail.com)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python: 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+**ChronosPulse** is an enterprise-grade NTP lifecycle manager. It transforms standard time synchronization into a self-healing, high-precision telemetry engine. Designed for RHEL 10, Ubuntu 25, and high-frequency trading or database environments where every millisecond counts.
+
+## 🚀 Architecture Overview
+
+ChronosPulse uses a decoupled architecture where the **Analytics Engine** (Python) performs heavy telemetry and the **Orchestrator** (Bash) manages system-level configurations.
+
 
 ## Project Summary
 ChronosPulse is an enterprise-grade NTP management suite designed for high-availability Linux environments (RHEL 10, Ubuntu 25+). It automates the selection of high-precision time sources, enforces Network Time Security (NTS), and performs deep hardware diagnostics to ensure system clock integrity.
@@ -23,3 +33,26 @@ In distributed enterprise systems, clock drift leads to data corruption and auth
 
 
 <img width="902" height="636" alt="image" src="https://github.com/user-attachments/assets/022c88dd-c5f7-4ae0-b8e6-0645345570a0" />
+
+
+```mermaid
+graph TD
+    A[Cron Job / Manual Start] --> B[deploy.sh Orchestrator]
+    B --> C[optimizer.py Analytics Engine]
+    
+    subgraph "Analytics Phase"
+    C --> C1[Scrape Public NTP Sources]
+    C --> C2[UDP 123 Latency Tests]
+    C2 --> C3[Identify Best Stratum 1/2 Peer]
+    C --> C4[Analyze RTC Drift PPM]
+    end
+
+    C3 & C4 --> D[.best_ntp State File]
+    D --> E{Sensitivity Gate}
+    
+    E -- Gain < 15% --> F[Log & Exit: No Change]
+    E -- Gain > 15% --> G[Update /etc/chrony.conf]
+    
+    G --> H[Restart chronyd Service]
+    H --> I[Post-Update Verification: 60s]
+    I --> J[Verify Stratum Authority]
