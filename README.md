@@ -18,5 +18,5 @@ In distributed enterprise systems, clock drift leads to data corruption and auth
 ## Installation & Usage
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/yourusername/chronospulse-ntp-optimizer.git](https://github.com/yourusername/chronospulse-ntp-optimizer.git)
+   git clone [https://github.com/yourusername/chronospulse-ntp-optimizer.git](https://github.com/subhanigori/chronospulse-ntp-optimizer.git)
    cd chronospulse-ntp-optimizer
