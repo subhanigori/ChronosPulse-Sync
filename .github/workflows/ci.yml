@@ -1,0 +1,299 @@
+# NTP Server Optimizer - CI/CD Workflow
+# Developer: subhanigori@gmail.com
+# Version: 2.0.0
+#
+# This workflow runs automated tests on push and pull requests
+# Tests are run on multiple Linux distributions to ensure compatibility
+
+name: CI - NTP Optimizer Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run tests weekly on Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }} - Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04]
+        python-version: ['3.6', '3.8', '3.9', '3.10', '3.11']
+        exclude:
+          # Python 3.6 not available on ubuntu-22.04
+          - os: ubuntu-22.04
+            python-version: '3.6'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Display Python version
+      run: python -c "import sys; print(sys.version)"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+    
+    - name: Lint with basic syntax check
+      run: |
+        python -m py_compile ntp_optimizer.py
+        echo "✓ Syntax check passed"
+    
+    - name: Run unit tests
+      run: |
+        python test_ntp_optimizer.py
+    
+    - name: Test dry-run execution
+      run: |
+        # Test that script runs in dry-run mode without errors
+        python ntp_optimizer.py --help
+        echo "✓ Help display works"
+        
+        python ntp_optimizer.py --version
+        echo "✓ Version display works"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Run security scan with Bandit
+      run: |
+        pip install bandit
+        bandit -r ntp_optimizer.py -f txt -o bandit_report.txt || true
+        cat bandit_report.txt
+    
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: bandit_report.txt
+
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install quality tools
+      run: |
+        pip install pylint pycodestyle
+    
+    - name: Run pylint
+      run: |
+        pylint ntp_optimizer.py --disable=C0103,C0114,C0115,C0116 || true
+    
+    - name: Run PEP8 style check
+      run: |
+        pycodestyle ntp_optimizer.py --max-line-length=100 --ignore=E501,W503 || true
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Check README exists
+      run: |
+        if [ ! -f README.md ]; then
+          echo "ERROR: README.md not found"
+          exit 1
+        fi
+        echo "✓ README.md exists"
+    
+    - name: Check LICENSE exists
+      run: |
+        if [ ! -f LICENSE ]; then
+          echo "ERROR: LICENSE not found"
+          exit 1
+        fi
+        echo "✓ LICENSE exists"
+    
+    - name: Verify author watermark
+      run: |
+        if ! grep -q "subhanigori@gmail.com" ntp_optimizer.py; then
+          echo "ERROR: Author watermark not found"
+          exit 1
+        fi
+        echo "✓ Author watermark present"
+    
+    - name: Check version consistency
+      run: |
+        VERSION_PY=$(grep "^__version__ = " ntp_optimizer.py | cut -d'"' -f2)
+        VERSION_README=$(grep "Version\*\*:" README.md | head -1 | grep -oP '\d+\.\d+\.\d+')
+        
+        echo "Version in ntp_optimizer.py: $VERSION_PY"
+        echo "Version in README.md: $VERSION_README"
+        
+        if [ "$VERSION_PY" != "$VERSION_README" ]; then
+          echo "WARNING: Version mismatch between files"
+        else
+          echo "✓ Version consistent across files"
+        fi
+
+  compatibility:
+    name: Compatibility Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Test on Rocky Linux (RHEL-like)
+      uses: docker://rockylinux:8
+      with:
+        entrypoint: /bin/bash
+        args: |
+          -c "
+          yum install -y python3 python3-pip &&
+          pip3 install requests &&
+          python3 -m py_compile ntp_optimizer.py &&
+          echo '✓ Rocky Linux 8 compatible'
+          "
+    
+    - name: Test on Debian
+      uses: docker://debian:11
+      with:
+        entrypoint: /bin/bash
+        args: |
+          -c "
+          apt-get update &&
+          apt-get install -y python3 python3-pip &&
+          pip3 install requests &&
+          python3 -m py_compile ntp_optimizer.py &&
+          echo '✓ Debian 11 compatible'
+          "
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test, security-scan, code-quality]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests
+    
+    - name: Test configuration parsing
+      run: |
+        python3 << 'EOF'
+        from ntp_optimizer import CONFIG
+        
+        # Validate CONFIG structure
+        assert 'testing' in CONFIG
+        assert 'selection' in CONFIG
+        assert 'logging' in CONFIG
+        
+        # Validate weights sum to 1.0
+        weights = CONFIG['selection']
+        total = (
+            weights['weight_latency'] +
+            weights['weight_jitter'] +
+            weights['weight_stratum'] +
+            weights['weight_reachability']
+        )
+        assert abs(total - 1.0) < 0.01, f"Weights sum to {total}, expected 1.0"
+        
+        print("✓ Configuration validation passed")
+        EOF
+    
+    - name: Test imports
+      run: |
+        python3 << 'EOF'
+        try:
+            from ntp_optimizer import NTPOptimizer, NTPServer, CONFIG
+            print("✓ All imports successful")
+        except ImportError as e:
+            print(f"✗ Import failed: {e}")
+            exit(1)
+        EOF
+
+  release:
+    name: Create Release Info
+    runs-on: ubuntu-latest
+    needs: [test, security-scan, code-quality, documentation, integration]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Extract version
+      id: get_version
+      run: |
+        VERSION=$(grep "^__version__ = " ntp_optimizer.py | cut -d'"' -f2)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+    
+    - name: Create release notes
+      run: |
+        cat > RELEASE_NOTES.md << 'EOF'
+        # NTP Server Optimizer v${{ steps.get_version.outputs.version }}
+        
+        **Developer**: subhanigori@gmail.com
+        **Date**: $(date +%Y-%m-%d)
+        
+        ## Features
+        - Automatic NTP service detection (chronyd/ntpd/systemd-timesyncd)
+        - Geographic region auto-detection
+        - Reliability & accuracy optimized selection
+        - Comprehensive performance testing
+        - Automatic configuration management
+        - Email notifications support
+        - Continuous optimization with scheduling
+        
+        ## Installation
+        ```bash
+        chmod +x install.sh
+        sudo ./install.sh
+        sudo python3 ntp_optimizer.py
+        ```
+        
+        ## Requirements
+        - Python 3.6+
+        - Linux (RHEL 8+, Ubuntu 20.04+, Debian 11+)
+        - Root/sudo access
+        
+        ## Support
+        Developer: subhanigori@gmail.com
+        EOF
+        
+        echo "✓ Release notes generated"
+    
+    - name: Upload release artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-info
+        path: RELEASE_NOTES.md
